@@ -1493,10 +1493,10 @@ pub const UserInterface = struct {
                         if (self.page.references.count() > 0) {
                             try self.out.print("Please delete all references to [{s}] first before yeeting this page.\n", .{self.page.lines.items[0].text});
                         } else {
-                            try self.out.print("Really delete page for [{s}]? y/N", .{self.page.lines.items[0].text});
+                            try self.out.print("Really yeet page for [{s}]? y/N", .{self.page.lines.items[0].text});
                             const ans = try self.readLine();
                             if (std.mem.eql(u8, ans, "y")) {
-                                try self.out.print("Page deleted.\n", .{});
+                                try self.out.print("Page yeeted.\n", .{});
                                 try std.fs.cwd().deleteFile(try util.pageFileName(self.page.lines.items[0].text));
                                 if (self.headers.find(self.page.lines.items[0].text)) |index| {
                                     self.headers.remove(index);
