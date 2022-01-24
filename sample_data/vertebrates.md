@@ -3,7 +3,6 @@ Vertebrates first appeared during the [Cambrian Period]. They are broken into fo
 - [amphibians]
 - [reptiles]
 - [birds]
-- [mammals]
 Vertebrates have several characteristics that differentiate them from other forms of life:
 - A vertebral column that runs from head to tail
 - An endoskeleton made of bone or cartilage

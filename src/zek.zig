@@ -549,17 +549,32 @@ pub const Page = struct {
     fn printWordNumbers(out: Writer, s: []u8) !u16 {
         var n: u16 = 1;
         var separator = true;
+        var slop: usize = 0; //used to keep track of extra chars for word ids that need multple characters (i.e. are greater than 9)
         for (s) |c| {
             if (c == ' ' or c == ',' or c == '(' or c == ')') {
                 separator = true;
-                try out.print(" ", .{});
+                if (slop > 0) {
+                    slop -= 1;
+                } else {
+                    try out.print(" ", .{});
+                }
             } else {
                 if (separator) {
                     try out.print("{any}", .{n});
                     n += 1;
+                    if (n >= 11) {
+                        slop += 1;
+                    }
+                    if (n >= 101) {
+                        slop += 1;
+                    }
                     separator = false;
                 } else {
-                    try out.print(" ", .{});
+                    if (slop > 0) {
+                        slop -= 1;
+                    } else {
+                        try out.print(" ", .{});
+                    }
                 }
             }
         }
@@ -862,8 +877,8 @@ const OutputManager = struct {
 
 const ViewModes = enum {
     split,
-    numbered,
     normal,
+    numbered,
 };
 pub const UserInterface = struct {
     const Self = @This();
