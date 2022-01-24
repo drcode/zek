@@ -19,6 +19,7 @@ else
     undefined);
 
 const maxBufLen = 10000;
+const maxLinkLen = 1000;
 //Headers is an ArrayList of all the names of the pages in the system. They are available in memory for querying at all times (unlike the bodies of the pages, which are only loaded on demand)
 const Headers = struct {
     const Self = @This();
@@ -84,7 +85,7 @@ const Headers = struct {
     }
     pub fn append(self: *Self, text: []const u8) !usize {
         try self.items.append(Header{
-            .title = try self.allocText(text),
+            .title = try std.ascii.allocLowerString(&self.allocator.allocator, text),
             .marked = false,
             .connections = undefined,
         });
@@ -117,12 +118,14 @@ const Headers = struct {
     }
 };
 fn forEachLink(context: anytype, comptime fun: anytype, s: []const u8) !void { //Modified means we will need to update backlinks (in other md files) during saving
+    var link: [maxLinkLen]u8 = undefined;
     var i: usize = 0;
     while (i < s.len) {
         if (s[i] == '[') {
             var j = i + 1;
             while (j < s.len and s[j] != ']') : (j += 1) {}
-            try fun(context, s[i + 1 .. j], (j == s.len));
+            const linkSlice = std.ascii.lowerString(link[0..], s[i + 1 .. j]);
+            try fun(context, linkSlice, (j == s.len));
             i = j + 1;
         } else i += 1;
     }
@@ -185,9 +188,12 @@ pub const Page = struct {
         try f.writer().print("- - {s}\n", .{context.text});
     }
     fn append(self: *Self, indent: u8, s: []const u8, modified: bool) !void {
-        assert(self.lines.items.len == 0 or self.lines.items[self.lines.items.len - 1].indent >= indent - 1);
+        var fixedIndent = indent;
+        if (self.lines.items.len > 0 and self.lines.items[self.lines.items.len - 1].indent < indent - 1) { //User is overindenting, let's fix and hope for the best
+            fixedIndent = self.lines.items[self.lines.items.len - 1].indent + 1;
+        }
         try self.lines.append(Line{
-            .indent = indent,
+            .indent = fixedIndent,
             .text = try self.allocText(s),
         });
         try forEachLink(.{ .self = self, .modified = modified }, gatherLink, s);
@@ -241,6 +247,8 @@ pub const Page = struct {
     fn outdent(self: *Self, index: usize) void {
         const items = self.lines.items;
         const indent = items[index].indent;
+        if (indent <= 1)
+            return;
         var end = index + 1;
         while (end < items.len and items[end].indent > indent) : (end += 1) {}
         var swapEnd = end;
@@ -497,7 +505,11 @@ pub const Page = struct {
                 var n = fmt.parseUnsigned(u16, s, 10) catch {
                     @panic("bad path");
                 };
-                index = self.navigateChildIndex(index, n - 1).?;
+                if (self.navigateChildIndex(index, n - 1)) |x| {
+                    index = x;
+                } else {
+                    return null;
+                }
                 while (i < path.len and path[i] == '.') : (i += 1) {}
                 start = i;
                 if (i >= path.len)
@@ -506,7 +518,11 @@ pub const Page = struct {
             }
         } else {
             for (path) |c| {
-                index = self.navigateChildIndex(index, c - '0' - 1).?;
+                if (self.navigateChildIndex(index, c - '0' - 1)) |x| {
+                    index = x;
+                } else {
+                    return null;
+                }
             }
         }
         return index;
@@ -559,7 +575,7 @@ const Action = struct {
         insert,
         goto,
         quit,
-        numbered,
+        view,
         edit,
         outdent,
         indent,
@@ -575,12 +591,14 @@ const Action = struct {
         help,
         overview,
         yeet,
+        skip,
     };
     command: Command,
     arg: []const u8,
     fn fromString(s: []u8) ?Action {
-        if (s.len == 0)
-            return null;
+        if (s.len == 0) {
+            return Action{ .command = .skip, .arg = undefined };
+        }
         switch (s[0]) {
             'a' => return Action{
                 .command = .append,
@@ -603,7 +621,7 @@ const Action = struct {
                 .arg = s[1..],
             },
             'v' => return Action{
-                .command = .numbered,
+                .command = .view,
                 .arg = undefined,
             },
             'e' => return Action{
@@ -843,9 +861,9 @@ const OutputManager = struct {
 };
 
 const ViewModes = enum {
-    normal,
-    numbered,
     split,
+    numbered,
+    normal,
 };
 pub const UserInterface = struct {
     const Self = @This();
@@ -1083,9 +1101,9 @@ pub const UserInterface = struct {
             if ((!terminatingMissingPage) and (!nonterminatingMissingPage))
                 return fragment.len;
             if (nonterminatingMissingPage) {
-                try self.out.print("Create pages y/N ?", .{});
+                try self.out.print("Create page(s) Y/n ?", .{});
                 const answer = try self.readLine();
-                if (std.mem.eql(u8, answer, "y")) {
+                if (std.mem.eql(u8, answer, "y") or std.mem.eql(u8, answer, "")) {
                     try forEachLink(.{ .self = self }, createHeader, fragment);
                 } else {
                     fragment = self.lineBuf[0..prevLen];
@@ -1349,68 +1367,102 @@ pub const UserInterface = struct {
                         try self.page.save();
                         break;
                     },
-                    .numbered => {
+                    .view => {
                         self.viewMode = @intToEnum(ViewModes, (@enumToInt(self.viewMode) + 1) % 3);
                     },
                     .edit => try self.editText(action.arg),
-                    .outdent => self.page.outdent(self.page.resolveLinePath(action.arg).?),
-                    .indent => self.page.indentLine(self.page.resolveLinePath(action.arg).?),
-                    .up => self.page.up(self.page.resolveLinePath(action.arg).?),
-                    .down => self.page.down(self.page.resolveLinePath(action.arg).?),
-                    .delete => try self.page.delete(self.page.resolveLinePath(action.arg).?),
+                    .outdent => {
+                        if (self.page.resolveLinePath(action.arg)) |path| {
+                            self.page.outdent(path);
+                        } else {
+                            try self.out.print("Invalid path.\n", .{});
+                        }
+                    },
+                    .indent => {
+                        if (self.page.resolveLinePath(action.arg)) |path| {
+                            self.page.indentLine(path);
+                        } else {
+                            try self.out.print("Invalid path.\n", .{});
+                        }
+                    },
+                    .up => {
+                        if (self.page.resolveLinePath(action.arg)) |path| {
+                            self.page.up(path);
+                        } else {
+                            try self.out.print("Invalid path.\n", .{});
+                        }
+                    },
+                    .down => {
+                        if (self.page.resolveLinePath(action.arg)) |path| {
+                            self.page.down(path);
+                        } else {
+                            try self.out.print("Invalid path.\n", .{});
+                        }
+                    },
+                    .delete => {
+                        if (self.page.resolveLinePath(action.arg)) |path| {
+                            try self.page.delete(path);
+                        } else {
+                            try self.out.print("Invalid path.\n", .{});
+                        }
+                    },
                     .sync => try self.sync(),
                     .todo => if (includeTodoModule) {
                         try self.userInterfaceTodo.activate(self, &printPage);
                     },
                     .move => {
-                        if (self.clipboard) |cl| {
-                            if (action.arg.len == 0) { //cancel operation
-                                self.clipboard = null;
-                                self.clipboardOther = false;
-                            } else if (self.clipboardOther) { //Moving from other page, not inter-page move
-                                if (self.pageOther) |*po| {
-                                    const srcLines = &po.lines;
-                                    var srcIndex = cl;
-                                    const srcIndent = srcLines.items[cl].indent;
-                                    const dstLines = self.page.lines;
-                                    var dstIndex = self.page.resolveLinePath(action.arg).?;
-                                    const dstIndent = dstLines.items[dstIndex].indent;
-                                    dstIndex += 1;
-                                    while (dstIndex < dstLines.items.len and dstLines.items[dstIndex].indent > dstIndent) : (dstIndex += 1) {}
-                                    var firstTime = true;
-                                    while (srcIndex < srcLines.items.len and (firstTime or srcLines.items[srcIndex].indent > srcIndent)) {
-                                        firstTime = false;
-                                        try self.page.insert(dstIndex, srcLines.items[srcIndex].indent + dstIndent + 1 - srcIndent, srcLines.items[srcIndex].text);
-                                        try po.delete(srcIndex);
-                                        dstIndex += 1;
-                                    }
-                                    try po.save();
-                                    try self.page.save();
+                        if (self.page.resolveLinePath(action.arg)) |path| {
+                            if (self.clipboard) |cl| {
+                                if (action.arg.len == 0) { //cancel operation
                                     self.clipboard = null;
                                     self.clipboardOther = false;
-                                } else @panic("missing other page");
-                            } else {
-                                const lines = self.page.lines;
-                                var srcIndex = cl;
-                                const srcIndent = lines.items[cl].indent;
-                                var dstIndex = self.page.resolveLinePath(action.arg).?;
-                                const dstIndent = lines.items[dstIndex].indent;
-                                dstIndex += 1;
-                                while (dstIndex < lines.items.len and lines.items[dstIndex].indent > dstIndent) : (dstIndex += 1) {}
-                                var firstTime = true;
-                                while (srcIndex < lines.items.len and (firstTime or lines.items[srcIndex].indent > srcIndent)) {
-                                    firstTime = false;
-                                    try self.page.insert(dstIndex, lines.items[srcIndex].indent + dstIndent + 1 - srcIndent, lines.items[srcIndex].text);
-                                    if (srcIndex > dstIndex)
-                                        srcIndex += 1;
-                                    try self.page.delete(srcIndex);
+                                } else if (self.clipboardOther) { //Moving from other page, not inter-page move
+                                    if (self.pageOther) |*po| {
+                                        const srcLines = &po.lines;
+                                        var srcIndex = cl;
+                                        const srcIndent = srcLines.items[cl].indent;
+                                        const dstLines = self.page.lines;
+                                        var dstIndex = path;
+                                        const dstIndent = dstLines.items[dstIndex].indent;
+                                        dstIndex += 1;
+                                        while (dstIndex < dstLines.items.len and dstLines.items[dstIndex].indent > dstIndent) : (dstIndex += 1) {}
+                                        var firstTime = true;
+                                        while (srcIndex < srcLines.items.len and (firstTime or srcLines.items[srcIndex].indent > srcIndent)) {
+                                            firstTime = false;
+                                            try self.page.insert(dstIndex, srcLines.items[srcIndex].indent + dstIndent + 1 - srcIndent, srcLines.items[srcIndex].text);
+                                            try po.delete(srcIndex);
+                                            dstIndex += 1;
+                                        }
+                                        try po.save();
+                                        try self.page.save();
+                                        self.clipboard = null;
+                                        self.clipboardOther = false;
+                                    } else @panic("missing other page");
+                                } else {
+                                    const lines = self.page.lines;
+                                    var srcIndex = cl;
+                                    const srcIndent = lines.items[cl].indent;
+                                    var dstIndex = path;
+                                    const dstIndent = lines.items[dstIndex].indent;
+                                    dstIndex += 1;
+                                    while (dstIndex < lines.items.len and lines.items[dstIndex].indent > dstIndent) : (dstIndex += 1) {}
+                                    var firstTime = true;
+                                    while (srcIndex < lines.items.len and (firstTime or lines.items[srcIndex].indent > srcIndent)) {
+                                        firstTime = false;
+                                        try self.page.insert(dstIndex, lines.items[srcIndex].indent + dstIndent + 1 - srcIndent, lines.items[srcIndex].text);
+                                        if (srcIndex > dstIndex)
+                                            srcIndex += 1;
+                                        try self.page.delete(srcIndex);
+                                    }
+                                    try self.page.save();
+                                    self.clipboard = null;
                                 }
-                                try self.page.save();
-                                self.clipboard = null;
+                            } else {
+                                self.clipboard = path;
+                                self.clipboardOther = false;
                             }
                         } else {
-                            self.clipboard = self.page.resolveLinePath(action.arg);
-                            self.clipboardOther = false;
+                            try self.out.print("Invalid path.\n", .{});
                         }
                     },
                     .merge => {
@@ -1513,6 +1565,9 @@ pub const UserInterface = struct {
                             }
                         }
                     },
+                    .skip => {
+                        try self.page.save();
+                    },
                 }
             } else {
                 printPage = true;
@@ -1522,15 +1577,16 @@ pub const UserInterface = struct {
 };
 
 pub fn main() !void {
-    if (builtin.os.tag == .linux) {
-        var wsz: std.os.linux.winsize = undefined;
-        if (0 == std.os.linux.syscall3(.ioctl, 1, 104, @ptrToInt(&wsz))) {
-            util.terminalWidth = wsz.ws_col;
-            util.terminalHeight = wsz.ws_row;
-            if (util.terminalWidth.? + util.terminalHeight.? != 123)
-                std.io.getStdOut().writer().print("\x1b[37;1m", .{}) catch unreachable;
-        }
+    var tty: std.fs.File = try std.fs.cwd().openFile("/dev/tty", .{ .read = true, .write = true });
+    defer tty.close();
+    var winSize = mem.zeroes(std.os.system.winsize);
+    const err = std.os.system.ioctl(tty.handle, std.os.system.T.IOCGWINSZ, @ptrToInt(&winSize));
+    if (std.os.errno(err) == .SUCCESS) {
+        util.terminalWidth = winSize.ws_col;
+        util.terminalHeight = winSize.ws_row;
     }
+
+    try std.io.getStdOut().writer().print("\x1b[37;1m", .{});
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const leaks = gpa.deinit();

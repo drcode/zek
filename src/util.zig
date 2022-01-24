@@ -44,25 +44,28 @@ pub fn pageFileName(title: []const u8) ![]const u8 {
     }
     return s;
 }
-fn dbg(k: anytype) void {
+pub fn dbg(k: anytype) void {
     const writer = std.io.getStdOut().writer();
-    if ((@TypeOf(k) == []const u8) or (@TypeOf(k) == []u8)) {
+    //if ((@TypeOf(k) == []const u8) or (@TypeOf(k) == []u8)) {
+    //writer.print("{any}", .{@TypeOf(k)}) catch unreachable;
+    //writer.print("{any}", .{@typeInfo(@TypeOf(k))}) catch unreachable;
+    if (@typeInfo(@TypeOf(k)) == .Pointer) {
         writer.print("{s}\n", .{k}) catch unreachable;
     } else {
         writer.print("{any}\n", .{k}) catch unreachable;
     }
 }
 
-fn dbgs(s: []const u8, k: anytype) void {
+pub fn dbgs(s: []const u8, k: anytype) void {
     const writer = std.io.getStdOut().writer();
     writer.print("{s}=", .{s}) catch unreachable;
     dbg(k);
 }
 
-fn dbgc(k: anytype) void {
+pub fn dbgc(k: anytype) void {
     @compileLog("", k);
 }
 
-fn dbgcs(s: anytype, k: anytype) void {
+pub fn dbgcs(s: anytype, k: anytype) void {
     @compileLog(s, k);
 }

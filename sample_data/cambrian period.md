@@ -1,0 +1,7 @@
+__references
+- vertebrates
+- - Vertebrates first appeared during the [Cambrian Period]. They are broken into four groups:
+- fish
+- - The fishes are the orginal group of [vertebrates] from which all the other groups evolved. They first appeared during the [Cambrian Period] as part of the Cambrian Explosion.
+- paleozoic era
+- - [cambrian period]
