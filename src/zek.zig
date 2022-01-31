@@ -11,6 +11,7 @@ const Reader = std.fs.File.Reader;
 const Term = std.ChildProcess.Term;
 const util = @import("util.zig");
 const time = @import("time.zig");
+const validator = @import("validator.zig");
 
 const includeTodoModule = false;
 const todoModule = (if (includeTodoModule) //The todo module is an experimental module not currently supported and is disabled
@@ -21,7 +22,7 @@ else
 const maxBufLen = 10000;
 const maxLinkLen = 1000;
 //Headers is an ArrayList of all the names of the pages in the system. They are available in memory for querying at all times (unlike the bodies of the pages, which are only loaded on demand)
-const Headers = struct {
+pub const Headers = struct {
     const Self = @This();
     const Header = struct {
         title: []u8,
@@ -47,7 +48,7 @@ const Headers = struct {
         mem.copy(u8, sCopy, s);
         return sCopy;
     }
-    fn init(parentAllocator: *Allocator) !Self {
+    pub fn init(parentAllocator: *Allocator) !Self {
         var allocator = try parentAllocator.create(std.heap.ArenaAllocator);
         allocator.* = std.heap.ArenaAllocator.init(parentAllocator);
         const dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
@@ -74,7 +75,7 @@ const Headers = struct {
             .items = items,
         };
     }
-    fn deinit(self: Self) void {
+    pub fn deinit(self: Self) void {
         self.allocator.deinit();
         self.parentAllocator.destroy(self.allocator);
     }
@@ -1349,6 +1350,23 @@ pub const UserInterface = struct {
             //try self.out.print("!!!missing key {s}", .{key.*});
         }
     }
+    pub fn setupDateRoll(self: *Self) !void {
+        try self.page.save();
+        if (self.pageOther) |po|
+            po.deinit();
+        self.pageOther = self.page;
+        self.page = try Page.init(self.allocator);
+        self.clipboard = null;
+        var dateBuf: [100]u8 = undefined;
+        {
+            var mgr = try OutputManager.init(self.allocator, false);
+            defer mgr.deinit();
+            try printDateRoll(self.allocator, &mgr, &dateBuf);
+            try mgr.flush(self.out, self.in);
+        }
+        var date = try time.printNowLocal(&dateBuf);
+        try self.page.load(date);
+    }
     fn eventLoop(self: *Self, initialPrint: bool) !void {
         var printPage: bool = initialPrint;
         while (true) {
@@ -1423,7 +1441,8 @@ pub const UserInterface = struct {
                     },
                     .sync => try self.sync(),
                     .todo => if (includeTodoModule) {
-                        try self.userInterfaceTodo.activate(self, &printPage);
+                        if (try self.userInterfaceTodo.activate(self, &printPage))
+                            break;
                     },
                     .move => {
                         if (self.page.resolveLinePath(action.arg)) |path| {
@@ -1491,22 +1510,8 @@ pub const UserInterface = struct {
                         }
                     },
                     .write => {
-                        try self.page.save();
-                        if (self.pageOther) |po|
-                            po.deinit();
-                        self.pageOther = self.page;
-                        self.page = try Page.init(self.allocator);
-                        self.clipboard = null;
-                        var dateBuf: [100]u8 = undefined;
-                        {
-                            var mgr = try OutputManager.init(self.allocator, false);
-                            defer mgr.deinit();
-                            try printDateRoll(self.allocator, &mgr, &dateBuf);
-                            try mgr.flush(self.out, self.in);
-                            printPage = false;
-                        }
-                        var date = try time.printNowLocal(&dateBuf);
-                        try self.page.load(date);
+                        try self.setupDateRoll();
+                        printPage = false;
                     },
                     .overview => {
                         for (self.headers.items.items) |*header| {
@@ -1606,6 +1611,20 @@ pub fn main() !void {
     defer {
         const leaks = gpa.deinit();
         assert(!leaks);
+    }
+
+    var args = try std.process.argsAlloc(&gpa.allocator);
+    defer std.process.argsFree(&gpa.allocator, args);
+
+    if (args.len > 1) {
+        assert(args.len == 2);
+        if (std.mem.eql(u8, args[1], "-validate")) {
+            try std.io.getStdOut().writer().print("validating...\n", .{});
+            try validator.validate(&gpa.allocator);
+            return;
+        }
+        try std.io.getStdOut().writer().print("Invalid command line argument", .{});
+        return;
     }
     var userInterface = try UserInterface.init(&gpa.allocator);
     defer userInterface.deinit();

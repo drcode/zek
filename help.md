@@ -5,7 +5,7 @@
 (d)elete
 - delete an item
 (e)dit
-- edit a specified item
+- edit a specified item (just "e" to edit the name of the page)
 (g)oto
 - goto specified page
 (h)elp

@@ -1,3 +1,1 @@
 __references
-- vertebrates
-- - [mammals]

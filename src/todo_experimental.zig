@@ -351,12 +351,15 @@ const ActionTodo = struct {
         help,
         sync,
         xtra,
+        skip,
+        write,
     };
     command: Command,
     arg: []const u8,
     fn fromString(s: []u8) ?ActionTodo {
-        if (s.len == 0)
-            return null;
+        if (s.len == 0) {
+            return ActionTodo{ .command = .skip, .arg = undefined };
+        }
         switch (s[0]) {
             'n' => return ActionTodo{
                 .command = .nextAction,
@@ -414,6 +417,10 @@ const ActionTodo = struct {
                 .command = .sync,
                 .arg = undefined,
             },
+            'w' => return ActionTodo{
+                .command = .write,
+                .arg = undefined,
+            },
             else => return null,
         }
     }
@@ -426,11 +433,15 @@ pub const UserInterfaceTodo = struct {
         nextPageIndex: usize,
         prevPage: bool,
         quit: bool,
+        write: bool,
     };
-    pub fn activate(self: *Self, ui: *zek.UserInterface, printPage: *bool) !void {
+    pub fn activate(self: *Self, ui: *zek.UserInterface, printPage: *bool) !bool {
         try ui.page.save();
         const eltr = try self.eventLoopTodo(ui);
         if (eltr.quit) {
+            printPage.* = false;
+        } else if (eltr.write) {
+            try ui.setupDateRoll();
             printPage.* = false;
         } else {
             if (!eltr.prevPage) {
@@ -442,6 +453,7 @@ pub const UserInterfaceTodo = struct {
                 try ui.page.load(name);
             }
         }
+        return eltr.quit;
     }
     fn trigger(self: *Self, ui: *zek.UserInterface, s: []const u8) !void {
         try self.pageTodo.append(s, false, false, false);
@@ -507,6 +519,7 @@ pub const UserInterfaceTodo = struct {
                             .nextPageIndex = 0,
                             .prevPage = false,
                             .quit = true,
+                            .write = false,
                         };
                     },
                     .todo => {
@@ -516,6 +529,7 @@ pub const UserInterfaceTodo = struct {
                             .nextPageIndex = 0,
                             .prevPage = true,
                             .quit = false,
+                            .write = true,
                         };
                     },
                     .goto => {
@@ -526,8 +540,18 @@ pub const UserInterfaceTodo = struct {
                                 .nextPageIndex = i,
                                 .prevPage = false,
                                 .quit = false,
+                                .write = true,
                             };
                         }
+                    },
+                    .write => {
+                        try ui.setupDateRoll();
+                        return EventLoopTodoResult{
+                            .nextPageIndex = 0,
+                            .prevPage = false,
+                            .quit = false,
+                            .write = true,
+                        };
                     },
                     .sync => {
                         try self.pageTodo.save();
@@ -541,6 +565,9 @@ pub const UserInterfaceTodo = struct {
                     .xtra => try self.pageTodo.updateXtra(action.arg),
                     .trigger => try self.trigger(ui, action.arg),
                     .zeFuture => try self.pageTodo.zeFuture(ui.out, ui.in),
+                    .skip => {
+                        try self.pageTodo.save();
+                    },
                 }
             }
         }
