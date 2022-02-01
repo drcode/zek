@@ -13,7 +13,7 @@ const util = @import("util.zig");
 const time = @import("time.zig");
 const validator = @import("validator.zig");
 
-const includeTodoModule = false;
+const includeTodoModule = true;
 const todoModule = (if (includeTodoModule) //The todo module is an experimental module not currently supported and is disabled
     @import("todo_experimental.zig")
 else
@@ -31,9 +31,9 @@ pub const Headers = struct {
     };
     var tempBuf: [maxBufLen]u8 = undefined;
     allocator: *std.heap.ArenaAllocator,
-    parentAllocator: *Allocator,
+    parentAllocator: Allocator,
     items: std.ArrayList(Header),
-    fn allocTextNoExtension(allocator: *Allocator, s: []const u8) ![]u8 {
+    fn allocTextNoExtension(allocator: Allocator, s: []const u8) ![]u8 {
         var extensionIndex: u8 = 0;
         while (extensionIndex < s.len) : (extensionIndex += 1) {
             if (s[extensionIndex] == '.')
@@ -48,16 +48,16 @@ pub const Headers = struct {
         mem.copy(u8, sCopy, s);
         return sCopy;
     }
-    pub fn init(parentAllocator: *Allocator) !Self {
+    pub fn init(parentAllocator: Allocator) !Self {
         var allocator = try parentAllocator.create(std.heap.ArenaAllocator);
         allocator.* = std.heap.ArenaAllocator.init(parentAllocator);
         const dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
         var iterator = dir.iterate();
-        var items = std.ArrayList(Header).init(&allocator.allocator);
+        var items = std.ArrayList(Header).init(allocator.allocator());
         while (try iterator.next()) |item| {
             const len = item.name.len;
             if (len >= 4 and std.mem.eql(u8, item.name[len - 3 ..], ".md")) {
-                const title = try allocTextNoExtension(&allocator.allocator, item.name);
+                const title = try allocTextNoExtension(allocator.allocator(), item.name);
                 for (title) |*c| {
                     if (c.* == '|')
                         c.* = '/';
@@ -86,7 +86,7 @@ pub const Headers = struct {
     }
     pub fn append(self: *Self, text: []const u8) !usize {
         try self.items.append(Header{
-            .title = try std.ascii.allocLowerString(&self.allocator.allocator, text),
+            .title = try std.ascii.allocLowerString(self.allocator.allocator(), text),
             .marked = false,
             .connections = undefined,
         });
@@ -140,20 +140,20 @@ pub const Page = struct {
     const Reference = std.ArrayList([]u8);
     var tempBuf: [maxBufLen]u8 = undefined;
     allocator: *std.heap.ArenaAllocator,
-    parentAllocator: *Allocator,
+    parentAllocator: Allocator,
     lines: std.ArrayList(Line),
     references: std.StringHashMap(Reference),
     links: std.StringHashMap(bool), //the bool indicates if the link has been modified
     modified: bool,
-    pub fn init(parentAllocator: *Allocator) !Self {
+    pub fn init(parentAllocator: Allocator) !Self {
         var allocator = try parentAllocator.create(std.heap.ArenaAllocator);
         allocator.* = std.heap.ArenaAllocator.init(parentAllocator);
         return Self{
             .parentAllocator = parentAllocator,
             .allocator = allocator,
-            .lines = std.ArrayList(Line).init(&allocator.allocator),
-            .references = std.StringHashMap(Reference).init(&allocator.allocator),
-            .links = std.StringHashMap(bool).init(&allocator.allocator),
+            .lines = std.ArrayList(Line).init(allocator.allocator()),
+            .references = std.StringHashMap(Reference).init(allocator.allocator()),
+            .links = std.StringHashMap(bool).init(allocator.allocator()),
             .modified = false,
         };
     }
@@ -162,7 +162,7 @@ pub const Page = struct {
         self.parentAllocator.destroy(self.allocator);
     }
     fn allocText(self: *Self, s: []const u8) ![]u8 {
-        const sCopy = try self.allocator.allocator.alloc(u8, s.len);
+        const sCopy = try self.allocator.allocator().alloc(u8, s.len);
         mem.copy(u8, sCopy, s);
         return sCopy;
     }
@@ -295,7 +295,7 @@ pub const Page = struct {
         self.modified = true;
     }
     fn appendReference(self: *Self, title: []const u8) !void {
-        var texts = std.ArrayList([]u8).init(&self.allocator.allocator);
+        var texts = std.ArrayList([]u8).init(self.allocator.allocator());
         _ = try self.references.getOrPutValue(try self.allocText(title), texts);
     }
     fn appendReferenceEntry(self: *Self, title: []const u8, entry: []const u8) !void {
@@ -324,7 +324,7 @@ pub const Page = struct {
                     const refTitleInfo = util.IndentInfo.parseIndent(line);
                     assert(refTitleInfo.indent == 1);
                     const refTitle = try self.allocText(refTitleInfo.text);
-                    var texts = std.ArrayList([]u8).init(&self.allocator.allocator);
+                    var texts = std.ArrayList([]u8).init(self.allocator.allocator());
                     while (true) {
                         futureLine = try readLine(reader);
                         if (futureLine) |refLine| {
@@ -742,14 +742,14 @@ const OutputManager = struct {
     numColumns: u8,
     buf: [maxBufLen]u8,
     allocator: *std.heap.ArenaAllocator,
-    parentAllocator: *Allocator,
+    parentAllocator: Allocator,
     lines: std.ArrayList([]u8),
     curIndent: u8,
     curLen: u16,
-    fn init(parentAllocator: *Allocator, noColumns: bool) !Self {
+    fn init(parentAllocator: Allocator, noColumns: bool) !Self {
         var allocator = try parentAllocator.create(std.heap.ArenaAllocator);
         allocator.* = std.heap.ArenaAllocator.init(parentAllocator);
-        var lines = std.ArrayList([]u8).init(&allocator.allocator);
+        var lines = std.ArrayList([]u8).init(allocator.allocator());
         var colWidth: ?u16 = null;
         var numColumns: u8 = 1;
         if (!noColumns)
@@ -808,7 +808,7 @@ const OutputManager = struct {
                         stop = mrs + 1;
                     }
                 }
-                const sCopy = try self.allocator.allocator.alloc(u8, extraWid + stop - start);
+                const sCopy = try self.allocator.allocator().alloc(u8, extraWid + stop - start);
                 mem.set(u8, sCopy[0..extraWid], ' ');
                 mem.copy(u8, sCopy[extraWid..], text[start..stop]);
                 try self.lines.append(sCopy);
@@ -820,7 +820,7 @@ const OutputManager = struct {
                 mostRecentSpace = stop;
             }
         }
-        const sCopy = try self.allocator.allocator.alloc(u8, extraWid + stop - start);
+        const sCopy = try self.allocator.allocator().alloc(u8, extraWid + stop - start);
         mem.set(u8, sCopy[0..extraWid], ' ');
         mem.copy(u8, sCopy[extraWid..], text[start..stop]);
         try self.lines.append(sCopy);
@@ -886,7 +886,7 @@ pub const UserInterface = struct {
     var useTestInput = false;
     in: Reader,
     out: Writer,
-    allocator: *Allocator,
+    allocator: Allocator,
     inputBuf: [maxBufLen]u8, //only used by readline
     lineBuf: [maxBufLen]u8, //used as a scratch pad for manipulating a line in a page
     headers: Headers,
@@ -899,7 +899,7 @@ pub const UserInterface = struct {
         todoModule.UserInterfaceTodo
     else
         void),
-    fn init(allocator: *Allocator) !Self {
+    fn init(allocator: Allocator) !Self {
         const out = io.getStdOut().writer();
         var in = io.getStdIn().reader();
         var dateBuf: [100]u8 = undefined;
@@ -935,7 +935,7 @@ pub const UserInterface = struct {
             po.deinit();
     }
     //When we view the list of daily notes, it's helpful to view not just a single page, but a whole week of pages
-    fn printDateRoll(allocator: *Allocator, out: *OutputManager, dateBuf: *[100]u8) !void {
+    fn printDateRoll(allocator: Allocator, out: *OutputManager, dateBuf: *[100]u8) !void {
         {
             var daysBack: i16 = 6;
             while (true) : (daysBack -= 1) {
@@ -1615,20 +1615,20 @@ pub fn main() !void {
         assert(!leaks);
     }
 
-    var args = try std.process.argsAlloc(&gpa.allocator);
-    defer std.process.argsFree(&gpa.allocator, args);
+    var args = try std.process.argsAlloc(gpa.allocator());
+    defer std.process.argsFree(gpa.allocator(), args);
 
     if (args.len > 1) {
         assert(args.len == 2);
         if (std.mem.eql(u8, args[1], "-validate")) {
             try std.io.getStdOut().writer().print("validating...\n", .{});
-            try validator.validate(&gpa.allocator);
+            try validator.validate(gpa.allocator());
             return;
         }
         try std.io.getStdOut().writer().print("Invalid command line argument", .{});
         return;
     }
-    var userInterface = try UserInterface.init(&gpa.allocator);
+    var userInterface = try UserInterface.init(gpa.allocator());
     defer userInterface.deinit();
     try userInterface.eventLoop(false);
 }

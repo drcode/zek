@@ -17,7 +17,7 @@ To use ZEK, simply put the ZEK executable on the path for your OS. The repositor
 
 # Building ZEK
 
-If you have another OS or CPU, install the zig programming language on your computer (last tested with zig version 0.9.0-dev.1374+8b8827478) and then run `zig build` to generate an executable for your purpose in the `zig-out/bin` directory.
+If you have another OS or CPU, install the zig programming language on your computer (last tested with zig version 0.9.0) and then run `zig build` to generate an executable for your purpose in the `zig-out/bin` directory.
 
 # Running ZEK
 

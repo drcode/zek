@@ -10,7 +10,7 @@ const Writer = std.fs.File.Writer;
 const Reader = std.fs.File.Reader;
 const zek = @import("zek.zig");
 
-pub fn validate(allocator: *Allocator) !void {
+pub fn validate(allocator: Allocator) !void {
     var headers = try zek.Headers.init(allocator);
     defer headers.deinit();
     var out = std.io.getStdOut().writer();

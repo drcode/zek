@@ -59,16 +59,16 @@ const PageTodo = struct {
     };
     var tempBuf: [util.maxBufLen]u8 = undefined;
     allocator: *std.heap.ArenaAllocator,
-    parentAllocator: *Allocator,
+    parentAllocator: Allocator,
     todos: std.ArrayList(Todo),
     modified: bool,
-    fn init(parentAllocator: *Allocator) !Self {
+    fn init(parentAllocator: Allocator) !Self {
         var allocator = try parentAllocator.create(std.heap.ArenaAllocator);
         allocator.* = std.heap.ArenaAllocator.init(parentAllocator);
         return Self{
             .parentAllocator = parentAllocator,
             .allocator = allocator,
-            .todos = std.ArrayList(Todo).init(&allocator.allocator),
+            .todos = std.ArrayList(Todo).init(allocator.allocator()),
             .modified = false,
         };
     }
@@ -77,7 +77,7 @@ const PageTodo = struct {
         self.parentAllocator.destroy(self.allocator);
     }
     fn allocText(self: *Self, s: []const u8) ![]u8 {
-        const sCopy = try self.allocator.allocator.alloc(u8, s.len);
+        const sCopy = try self.allocator.allocator().alloc(u8, s.len);
         mem.copy(u8, sCopy, s);
         return sCopy;
     }
