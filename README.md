@@ -3,9 +3,10 @@
 https://www.youtube.com/watch?v=4W_m176PIdU
 
 "ZEK" stands for "Zig Editor of Knowledge". It is written in ziglang for maximum performance. It is based on the Zettelkasten system, also called a PKMS, or a "roam-like" editor. It lets you create notes that are deeply linked, without hierarchies. It supports:
-- Backlinks 
+- Backlinks
+- Support for outlines in each page
 - An "overview" generator for the database
-- 
+- Automated syncronization to a git repository, allowing for multi-device usage of a database
 
 Zek was created by Conrad Barski (The author of "Land of Lisp" as well as other books.) Follow Conrad on twitter at: www.twitter.com/lisperati
 
@@ -25,7 +26,7 @@ Simply execture `zek` from the directory where you want your database files to l
 
 Q: What part of the database is loaded into RAM when the app runs?
 
-A: Only the current page, and the previously-used page- This makes the app extremely fast and light weight. Edits to the current page are saved back to the disk at the moment when another page is visited or when you press [enter] from the prompt (which "does nothing"). When a page is saved and it has new links to other pages, the backlinks to those pages are updated on disk, but those other pages are not loaded into RAM to do this.
+A: Only the current page, and the previously-used page (so you can quickly go 'back'). This makes the app extremely fast and light weight. Edits to the current page are saved back to the disk at the moment when another page is visited or when you press [enter] from the prompt (which does nothing aside from saving your work). When a page is saved and it has new links to other pages, the backlinks to those pages are updated on disk at that time as well. However, those other pages are not loaded into RAM to do this.
 
 Q: What is the command for creating a page?
 
@@ -37,7 +38,7 @@ A: Most OSes don't like file names with slashes. However, when referencing date 
 
 Q: How do I rename a page?
 
-A:You do this by editing the root node of the page outline, which contains the name of the page. To do this, simply perform the edit command `e` without any path.
+A:You do this by editing the root node of the page outline, which contains the name of the page. To do this, simply perform the edit command `e` without any path (the empty path is the path for the root node).
 
 # License
 
