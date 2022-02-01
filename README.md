@@ -27,3 +27,7 @@ Q: Why do the files for date pages have pipe symbols in them?
 A: Most OSes don't like file names with slashes. However, when referencing date pages from within zek you can just use reference dates with the usual hyphens.
 
 Q: How do I rename a page? You do this by editing the root node of the page outline, which contains the name of the page. To do this, simply perform the edit command `e` without any path.
+
+# License
+
+ZEK is licensed with the Eclipse Public License 1.0 http://opensource.org/licenses/eclipse-1.0.php
