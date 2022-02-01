@@ -20,7 +20,7 @@ If you have another OS or CPU, install the zig programming language on your comp
 
 # Running ZEK
 
-Simply execture `zek` from the directory where you want your database files to live. Now follow the youtube video above for basic usage, and hit 'h' for a full list of commands.
+Simply execture `zek` from the directory where you want your database files to live. Now follow the youtube video above for basic usage. Hit 'h' for a full list of commands.
 
 # FAQ
 
