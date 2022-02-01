@@ -8,7 +8,7 @@ Follow conrad on twitter at: www.twitter.com/lisperati
 
 # Installing ZEK
 
-To use ZEK, simply put the ZEK executable on the path for your OS. The repository contains three pre-built x86 executable files (`zek_linux`, zek_macos`, or `zek_windows.exe`) which you should rename to 'zek'. Then, set up a new directory on your PC that will contain your database files. Place the file `help.md` in this directory, for easy access to help information, via the 'h' key.
+To use ZEK, simply put the ZEK executable on the path for your OS. The repository contains three pre-built x86 executable files (`zek_linux`, `zek_macos`, or `zek_windows.exe`) which you should rename to 'zek'. Then, set up a new directory on your PC that will contain your database files. Place the file `help.md` in this directory, for easy access to help information, via the 'h' key.
 
 # Building ZEK
 
