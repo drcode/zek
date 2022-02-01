@@ -5,6 +5,7 @@ https://www.youtube.com/watch?v=4W_m176PIdU
 "ZEK" stands for "Zig Editor of Knowledge". It is written in ziglang for maximum performance. It is based on the Zettelkasten system, also called a PKMS, or a "roam-like" editor. It lets you create notes that are deeply linked, without hierarchies. It supports:
 - Backlinks
 - Support for outlines in each page
+- All database files are acessible as text files
 - An "overview" generator for the database
 - Automated syncronization to a git repository, allowing for multi-device usage of a database
 
@@ -21,6 +22,10 @@ If you have another OS or CPU, install the zig programming language on your comp
 # Running ZEK
 
 Simply execture `zek` from the directory where you want your database files to live. Now follow the youtube video above for basic usage. Hit 'h' for a full list of commands.
+
+# Validating the Database
+
+ZEK will ensure that every linked page has a matching backlink, and will also maintain other database properties. If you ever edit database files by hand, it is therefore recommended that you have ZEK validate the database again to make sure there are no errors in the structure of the database. To do this, run ZEK with the '-validate' flag, i.e. `zek -validate`.
 
 # FAQ
 
