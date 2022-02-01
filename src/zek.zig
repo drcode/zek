@@ -1597,18 +1597,18 @@ pub const UserInterface = struct {
 };
 
 pub fn main() !void {
-    var tty: std.fs.File = try std.fs.cwd().openFile("/dev/tty", .{ .read = true, .write = true });
-    defer tty.close();
     if (builtin.os.tag != .windows) {
+        var tty: std.fs.File = try std.fs.cwd().openFile("/dev/tty", .{ .read = true, .write = true });
+        defer tty.close();
         var winSize = mem.zeroes(std.os.system.winsize);
         const err = std.os.system.ioctl(tty.handle, std.os.system.T.IOCGWINSZ, @ptrToInt(&winSize));
         if (std.os.errno(err) == .SUCCESS) {
             util.terminalWidth = winSize.ws_col;
             util.terminalHeight = winSize.ws_row;
         }
+        try std.io.getStdOut().writer().print("\x1b[37;1m", .{});
     }
 
-    try std.io.getStdOut().writer().print("\x1b[37;1m", .{});
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const leaks = gpa.deinit();
