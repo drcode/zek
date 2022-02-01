@@ -757,7 +757,7 @@ const OutputManager = struct {
                 colWidth = tw;
                 if (util.terminalHeight) |th| {
                     if (tw > 100) {
-                        if (tw / th > 4) {
+                        if ((tw / th > 4) or (tw > 150)) {
                             numColumns = 3;
                             colWidth = (tw - 4) / 3;
                         } else {
@@ -1599,11 +1599,13 @@ pub const UserInterface = struct {
 pub fn main() !void {
     var tty: std.fs.File = try std.fs.cwd().openFile("/dev/tty", .{ .read = true, .write = true });
     defer tty.close();
-    var winSize = mem.zeroes(std.os.system.winsize);
-    const err = std.os.system.ioctl(tty.handle, std.os.system.T.IOCGWINSZ, @ptrToInt(&winSize));
-    if (std.os.errno(err) == .SUCCESS) {
-        util.terminalWidth = winSize.ws_col;
-        util.terminalHeight = winSize.ws_row;
+    if (builtin.os.tag != .windows) {
+        var winSize = mem.zeroes(std.os.system.winsize);
+        const err = std.os.system.ioctl(tty.handle, std.os.system.T.IOCGWINSZ, @ptrToInt(&winSize));
+        if (std.os.errno(err) == .SUCCESS) {
+            util.terminalWidth = winSize.ws_col;
+            util.terminalHeight = winSize.ws_row;
+        }
     }
 
     try std.io.getStdOut().writer().print("\x1b[37;1m", .{});

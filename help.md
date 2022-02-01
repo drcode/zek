@@ -20,8 +20,6 @@ in(j)ect
 - shows the entirety of the database, sorted by max connected nodes with their connected nodes
 (s)ync
 - sync everything with the git repo
-(t)odo
-- switch into todo list mode
 (u)nion
 - combines current and previously visited page into one page
 (v)iew

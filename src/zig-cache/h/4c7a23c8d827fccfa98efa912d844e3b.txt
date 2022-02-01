@@ -1,0 +1,1 @@
+35154 81424 1634259195000000000 1ba9a3868c2db4bd8dc7bc0e9d5e1bac /home/drcode/zig/lib/libc/mingw/lib-common/kernel32.def.in
