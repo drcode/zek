@@ -2,9 +2,9 @@
 
 https://www.youtube.com/watch?v=4W_m176PIdU
 
-"ZEK" stands for "Zig Editor of Knowledge". It is written in ziglang for maximum performance. It is based on the Zettelkasten system, also called a PKMS, or a "roam-like" editor. It let's you create notes that are deeply linked, without hierarchies. It supports backlinks. Zek was created by Conrad Barski (The author of "Land of Lisp" as well as other books) and is available as open source at https://github.com/drcode/zek
+"ZEK" stands for "Zig Editor of Knowledge". It is written in ziglang for maximum performance. It is based on the Zettelkasten system, also called a PKMS, or a "roam-like" editor. It lets you create notes that are deeply linked, without hierarchies. It supports backlinks. Zek was created by Conrad Barski. (The author of "Land of Lisp" as well as other books)
 
-Follow conrad on twitter at: www.twitter.com/lisperati
+Follow Conrad on twitter at: www.twitter.com/lisperati
 
 # Installing ZEK
 
