@@ -950,7 +950,13 @@ pub const UserInterface = struct {
         }
     }
     pub fn readLine(self: *Self) ![]u8 {
-        const result = (try self.in.readUntilDelimiterOrEof(&self.inputBuf, '\n')).?;
+        var result: []u8 = undefined;
+        if (try self.in.readUntilDelimiterOrEof(&self.inputBuf, '\n')) |r| {
+            result = r;
+        } else {
+            mem.copy(u8, self.inputBuf[0..], "q");
+            result = self.inputBuf[0..1];
+        }
         if (useTestInput)
             try self.out.print("\nread \"{s}\"\n", .{result});
         return result;
