@@ -45,6 +45,10 @@ Q: How do I rename a page?
 
 A:You do this by editing the root node of the page outline, which contains the name of the page. To do this, simply perform the edit command `e` without any path (the empty path is the path for the root node).
 
+Q: Why is the command for deleting a page called "yeet"?
+
+A: All commands in ZEK are single letter commands, and I ran out of letters in the alphabet, aside from 'y'.
+
 # License
 
 ZEK is licensed with the Eclipse Public License 1.0 http://opensource.org/licenses/eclipse-1.0.php
