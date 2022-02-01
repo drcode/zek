@@ -39,7 +39,7 @@ A: To create a page, simply link to the page in square brackets from another pag
 
 Q: Why do the files for date pages have pipe symbols in them?
 
-A: Most OSes don't like file names with slashes. However, when referencing date pages from within zek you can just use reference dates with the usual hyphens.
+A: Most OSes don't like file names with slashes. However, when referencing date pages from within zek you can just use reference dates with the usual slashes.
 
 Q: How do I rename a page?
 
