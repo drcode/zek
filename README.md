@@ -15,7 +15,7 @@ Zek was created by Conrad Barski (The author of "Land of Lisp" as well as other 
 
 ZEK IS STILL ALPHA-QUALITY SOFTWARE, PLEASE BE KIND IF YOU RUN INTO ANY BUGS!
 
-To use ZEK, simply put the ZEK executable on the path for your OS. The repository contains three pre-built x86 executable files (`zek_linux`, `zek_macos`, or `zek_windows.exe`) which you should rename to 'zek'. Then, set up a new directory on your PC that will contain your database files. Place the file `help.md` in this directory, for easy access to help information, via the 'h' key. (The help file is just another file in the database.)
+To use ZEK, simply put the ZEK executable on the path for your OS. The repository contains four pre-built x86 executable files (`zek_linux`, `zek_macos_x86`, `zek_macos_M1`, or `zek_windows.exe`) which you should rename to 'zek'. Then, set up a new directory on your PC that will contain your database files. Place the file `help.md` in this directory, for easy access to help information, via the 'h' key. (The help file is just another file in the database.)
 
 # Building ZEK
 
