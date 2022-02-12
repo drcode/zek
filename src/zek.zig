@@ -13,7 +13,7 @@ const util = @import("util.zig");
 const time = @import("time.zig");
 const validator = @import("validator.zig");
 
-const includeTodoModule = true;
+const includeTodoModule = false;
 const todoModule = (if (includeTodoModule) //The todo module is an experimental module not currently supported and is disabled
     @import("todo_experimental.zig")
 else
