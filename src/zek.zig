@@ -13,7 +13,7 @@ const util = @import("util.zig");
 const time = @import("time.zig");
 const validator = @import("validator.zig");
 
-const includeTodoModule = true;
+const includeTodoModule = false;
 const todoModule = (if (includeTodoModule) //The todo module is an experimental module not currently supported and is disabled
     @import("todo_experimental.zig")
 else
@@ -212,7 +212,7 @@ pub const Page = struct {
         self.modified = true;
     }
     fn update(self: *Self, index: usize, text: []const u8) !void {
-        try forEachLink(.{ .self = self, .modified = true }, gatherLink, self.lines.items[index].text);
+        //try forEachLink(.{ .self = self, .modified = true }, gatherLink, self.lines.items[index].text);
         self.lines.items[index].text = try self.allocText(text);
         try forEachLink(.{ .self = self, .modified = true }, gatherLink, self.lines.items[index].text);
         self.modified = true;
@@ -581,6 +581,29 @@ pub const Page = struct {
         }
         try out.print("\n", .{});
         return n + 1;
+    }
+    fn smartRenameSelf(self: *Self, oldText: []u8, newText: []u8) !void { //The page has been renamed, need to fix all links/references to the page. Page is out of date after the process is complete and should no longer be accessed
+        {
+            var i = self.links.iterator();
+            while (i.next()) |kv| {
+                kv.value_ptr.* = true;
+            }
+        }
+        try self.save();
+        {
+            var i = self.references.iterator();
+            while (i.next()) |kv| {
+                const ref = kv.key_ptr.*;
+                var tempPage = try Page.init(self.allocator);
+                defer tempPage.deinit();
+                try tempPage.load(ref);
+                tempPage.smartRenameLink(oldText, newText);
+                try tempPage.save();
+            }
+        }
+    }
+    fn smartRenameLink(self: *Self, oldText: []u8, newText: []u8) !void { //A link in this page has been renamed, need to fix link text and all references. Page is out of date after the process is complete and should no longer be accessed
+
     }
 };
 
@@ -1169,7 +1192,8 @@ pub const UserInterface = struct {
     }
     fn editText(self: *Self, path: []const u8) !void {
         const index = self.page.resolveLinePath(path).?;
-        const oldText = self.page.lines.items[index].text;
+        util.dbgs("index", index);
+        var oldText = self.page.lines.items[index].text;
         const maxNum = try Page.printWordNumbers(self.out, oldText);
         try self.out.print("{s}\n", .{oldText});
         try self.out.print("#", .{});
@@ -1183,7 +1207,15 @@ pub const UserInterface = struct {
         const endIndex = Page.wordNumberIndex(oldText, end);
         const endSlice = oldText[endIndex..];
         std.mem.copy(u8, self.lineBuf[fragment.len..], endSlice);
+        if (index == 0) {
+            mem.copy(u8, self.inputBuf[0..oldText.len], oldText);
+            oldText = self.inputBuf[0..oldText.len];
+        }
         try self.page.update(index, self.lineBuf[0 .. fragment.len + endSlice.len]);
+        if (index == 0) {
+            try self.page.smartRenameSelf(oldText, self.lineBuf[0 .. fragment.len + endSlice.len]);
+            //todo: page is now out of date, need to reload
+        }
     }
     fn goto(self: *Self, s: []const u8) !void {
         try self.page.save();
@@ -1231,6 +1263,7 @@ pub const UserInterface = struct {
             const ref = kv.key_ptr.*;
             try self.page.appendReference(ref);
             var tempPage = try Page.init(self.allocator);
+            defer tempPage.deinit();
             try tempPage.load(ref);
             for (tempPage.lines.items[1..]) |line, lineIndex| {
                 const text = line.text;

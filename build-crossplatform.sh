@@ -2,7 +2,7 @@ rm zek_linux
 rm zek_windows.exe
 rm zek_macos_x86
 rm zek_macos_M1
-zig build
+zig build -Dtarget=x86_64-linux
 mv zig-out/bin/zek zek_linux
 zig build-exe src/zek.zig -target x86_64-windows
 mv zek.exe zek_windows.exe
