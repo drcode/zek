@@ -1,1 +1,0 @@
-54586 81497 1634259195000000000 31ee54f6aea4d07cc45db68137c9ee4d /home/drcode/zig/lib/libc/mingw/lib-common/ntdll.def.in
