@@ -1604,7 +1604,7 @@ pub const UserInterface = struct {
 
 pub fn main() !void {
     if (builtin.os.tag != .windows) {
-        var tty: std.fs.File = try std.fs.cwd().openFile("/dev/tty", .{ .read = true, .write = true });
+        var tty: std.fs.File = try std.fs.cwd().openFile("/dev/tty", .{ .mode = std.fs.File.OpenMode.read_write });
         defer tty.close();
         var winSize = mem.zeroes(std.os.system.winsize);
         const err = std.os.system.ioctl(tty.handle, std.os.system.T.IOCGWINSZ, @ptrToInt(&winSize));
