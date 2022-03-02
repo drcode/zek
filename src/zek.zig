@@ -199,10 +199,6 @@ pub const Page = struct {
         });
         try forEachLink(.{ .self = self, .modified = modified }, gatherLink, s);
     }
-    fn replace(self: *Self, index: usize, text: []u8) !void {
-        self.lines.items[index].text = try self.allocText(text);
-        try forEachLink(.{ .self = self, .modified = true }, gatherLink, text);
-    }
     fn insert(self: *Self, index: usize, indent: u8, s: []u8) !void {
         try self.lines.insert(index, Line{
             .indent = indent,
@@ -213,6 +209,7 @@ pub const Page = struct {
     }
     fn update(self: *Self, index: usize, text: []const u8) !void {
         //try forEachLink(.{ .self = self, .modified = true }, gatherLink, self.lines.items[index].text);
+        try forEachLink(.{ .self = self, .modified = true }, gatherLink, self.lines.items[index].text);
         self.lines.items[index].text = try self.allocText(text);
         try forEachLink(.{ .self = self, .modified = true }, gatherLink, self.lines.items[index].text);
         self.modified = true;
@@ -594,16 +591,55 @@ pub const Page = struct {
             var i = self.references.iterator();
             while (i.next()) |kv| {
                 const ref = kv.key_ptr.*;
-                var tempPage = try Page.init(self.allocator);
+                var tempPage = try Page.init(self.allocator.allocator());
                 defer tempPage.deinit();
                 try tempPage.load(ref);
-                tempPage.smartRenameLink(oldText, newText);
+                try tempPage.smartRenameLink(oldText, newText);
                 try tempPage.save();
             }
         }
+        unreachable;
     }
     fn smartRenameLink(self: *Self, oldText: []u8, newText: []u8) !void { //A link in this page has been renamed, need to fix link text and all references. Page is out of date after the process is complete and should no longer be accessed
-
+        for (self.lines.items) |line, index| {
+            util.dbgs("line", line.text);
+            var found = false;
+            var s: []u8 = tempBuf[0..0];
+            var i: usize = 0;
+            while (i < line.text.len) {
+                if (line.text[i] == '[') {
+                    s.len += 1;
+                    s[s.len - 1] = '[';
+                    var j = i + 1;
+                    while (j < line.text.len and line.text[j] != ']') {
+                        j += 1;
+                    }
+                    util.dbgs("oldtext", oldText);
+                    util.dbgs("textpart", line.text[i + 1 .. j]);
+                    if (std.mem.eql(u8, line.text[i + 1 .. j], oldText)) {
+                        const k = s.len;
+                        s.len += newText.len;
+                        std.mem.copy(u8, s[k..], newText);
+                        found = true;
+                    } else {
+                        const k = s.len;
+                        s.len += j - i - 1;
+                        std.mem.copy(u8, s[k..], line.text[i + 1 .. j]);
+                    }
+                    s.len += 1;
+                    s[s.len - 1] = ']';
+                    i = j + 1;
+                } else {
+                    s.len += 1;
+                    s[s.len - 1] = line.text[i];
+                    i += 1;
+                }
+            }
+            if (found) {
+                try self.update(index, s);
+            }
+        }
+        self.modified = true;
     }
 };
 
@@ -1192,7 +1228,6 @@ pub const UserInterface = struct {
     }
     fn editText(self: *Self, path: []const u8) !void {
         const index = self.page.resolveLinePath(path).?;
-        util.dbgs("index", index);
         var oldText = self.page.lines.items[index].text;
         const maxNum = try Page.printWordNumbers(self.out, oldText);
         try self.out.print("{s}\n", .{oldText});
@@ -1297,7 +1332,7 @@ pub const UserInterface = struct {
                     }
                 }
                 if (match) {
-                    try tempPage.replace(lineIndex + 1, self.lineBuf[0..iDst]);
+                    try tempPage.update(lineIndex + 1, self.lineBuf[0..iDst]);
                     try self.page.appendReferenceEntry(ref, self.lineBuf[0..iDst]);
                 }
             }
