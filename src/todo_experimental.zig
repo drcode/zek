@@ -450,7 +450,7 @@ pub const UserInterfaceTodo = struct {
                 ui.pageOther = ui.page;
                 ui.page = try zek.Page.init(ui.allocator);
                 const name = ui.headers.items.items[eltr.nextPageIndex].title;
-                try ui.page.load(name);
+                try ui.page.load(ui.headers.hashedItems, name);
             }
         }
         return eltr.quit;

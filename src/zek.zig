@@ -33,6 +33,7 @@ pub const Headers = struct {
     allocator: *std.heap.ArenaAllocator,
     parentAllocator: Allocator,
     items: std.ArrayList(Header),
+    hashedItems: std.StringHashMap(usize),
     fn allocTextNoExtension(allocator: Allocator, s: []const u8) ![]u8 {
         var extensionIndex: u8 = 0;
         while (extensionIndex < s.len) : (extensionIndex += 1) {
@@ -54,6 +55,7 @@ pub const Headers = struct {
         const dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
         var iterator = dir.iterate();
         var items = std.ArrayList(Header).init(allocator.allocator());
+        var hashedItems = std.StringHashMap(usize).init(allocator.allocator());
         while (try iterator.next()) |item| {
             const len = item.name.len;
             if (len >= 4 and std.mem.eql(u8, item.name[len - 3 ..], ".md")) {
@@ -67,12 +69,14 @@ pub const Headers = struct {
                     .marked = false,
                     .connections = undefined,
                 });
+                try hashedItems.put(title, items.items.len - 1);
             }
         }
         return Self{
             .parentAllocator = parentAllocator,
             .allocator = allocator,
             .items = items,
+            .hashedItems = hashedItems,
         };
     }
     pub fn deinit(self: Self) void {
@@ -85,11 +89,13 @@ pub const Headers = struct {
         }
     }
     pub fn append(self: *Self, text: []const u8) !usize {
+        const s = try std.ascii.allocLowerString(self.allocator.allocator(), text);
         try self.items.append(Header{
-            .title = try std.ascii.allocLowerString(self.allocator.allocator(), text),
+            .title = s,
             .marked = false,
             .connections = undefined,
         });
+        try self.hashedItems.put(s, self.items.items.len - 1);
         return self.items.items.len - 1;
     }
     fn markByQuery(self: *Self, query: []const u8) u16 {
@@ -103,15 +109,11 @@ pub const Headers = struct {
         return numMarked;
     }
     pub fn find(self: *Self, query: []const u8) ?usize {
-        for (self.items.items) |header, i| {
-            if (mem.eql(u8, query, header.title)) {
-                return i;
-            }
-        }
-        return null;
+        return self.hashedItems.get(query);
     }
     fn remove(self: *Self, i: usize) void {
-        _ = self.items.swapRemove(i);
+        _ = self.hashedItems.remove(self.items.items[i].title);
+        _ = self.items.orderedRemove(i);
     }
     fn sortByConnections(context: void, a: Header, b: Header) bool {
         _ = context;
@@ -302,7 +304,8 @@ pub const Page = struct {
     fn readLine(f: Reader) !?[]u8 {
         return try f.readUntilDelimiterOrEof(&tempBuf, '\n');
     }
-    pub fn load(self: *Self, title: []const u8) !void {
+    pub fn load(self: *Self, hashedTitles: std.StringHashMap(usize), title: []const u8) !void {
+        _ = hashedTitles;
         try self.append(0, title, false);
         const fname = try util.pageFileName(title);
         if (util.fileExists(fname)) {
@@ -334,7 +337,7 @@ pub const Page = struct {
                             break;
                         }
                     }
-                    if (texts.items.len > 0) {
+                    if (texts.items.len > 0 and hashedTitles.contains(refTitle)) { //The reference is not an empty reference, and the referred item was not previously renamed/deleted
                         try self.references.put(refTitle, texts);
                     } else {
                         _ = self.references.remove(refTitle);
@@ -579,7 +582,7 @@ pub const Page = struct {
         try out.print("\n", .{});
         return n + 1;
     }
-    fn smartRenameSelf(self: *Self, oldText: []u8, newText: []u8) !void { //The page has been renamed, need to fix all links/references to the page. Page is out of date after the process is complete and should no longer be accessed
+    fn smartRenameSelf(self: *Self, hashedTitles: std.StringHashMap(usize), oldText: []u8, newText: []u8) !void { //The page has been renamed, need to fix all links/references to the page. Page is out of date after the process is complete and should no longer be accessed
         {
             var i = self.links.iterator();
             while (i.next()) |kv| {
@@ -593,16 +596,14 @@ pub const Page = struct {
                 const ref = kv.key_ptr.*;
                 var tempPage = try Page.init(self.allocator.allocator());
                 defer tempPage.deinit();
-                try tempPage.load(ref);
+                try tempPage.load(hashedTitles, ref);
                 try tempPage.smartRenameLink(oldText, newText);
                 try tempPage.save();
             }
         }
-        unreachable;
     }
     fn smartRenameLink(self: *Self, oldText: []u8, newText: []u8) !void { //A link in this page has been renamed, need to fix link text and all references. Page is out of date after the process is complete and should no longer be accessed
         for (self.lines.items) |line, index| {
-            util.dbgs("line", line.text);
             var found = false;
             var s: []u8 = tempBuf[0..0];
             var i: usize = 0;
@@ -614,8 +615,6 @@ pub const Page = struct {
                     while (j < line.text.len and line.text[j] != ']') {
                         j += 1;
                     }
-                    util.dbgs("oldtext", oldText);
-                    util.dbgs("textpart", line.text[i + 1 .. j]);
                     if (std.mem.eql(u8, line.text[i + 1 .. j], oldText)) {
                         const k = s.len;
                         s.len += newText.len;
@@ -964,13 +963,13 @@ pub const UserInterface = struct {
         var dateBuf: [100]u8 = undefined;
         var mgr = try OutputManager.init(allocator, false);
         defer mgr.deinit();
-        try printDateRoll(allocator, &mgr, &dateBuf);
-        try mgr.flush(out, in);
         var headers = try Headers.init(allocator);
+        try printDateRoll(headers.hashedItems, allocator, &mgr, &dateBuf);
+        try mgr.flush(out, in);
         var page = try Page.init(allocator);
         {
             var date = try time.printNowLocal(&dateBuf);
-            try page.load(date);
+            try page.load(headers.hashedItems, date);
         }
         return UserInterface{
             .in = in,
@@ -994,14 +993,14 @@ pub const UserInterface = struct {
             po.deinit();
     }
     //When we view the list of daily notes, it's helpful to view not just a single page, but a whole week of pages
-    fn printDateRoll(allocator: Allocator, out: *OutputManager, dateBuf: *[100]u8) !void {
+    fn printDateRoll(hashedTitles: std.StringHashMap(usize), allocator: Allocator, out: *OutputManager, dateBuf: *[100]u8) !void {
         {
             var daysBack: i16 = 6;
             while (true) : (daysBack -= 1) {
                 const date = try time.printDateTime(time.timestamp2DateTime(time.unix2local(time.adjustedTimestamp(-daysBack))), dateBuf);
                 var datePage = try Page.init(allocator);
                 defer datePage.deinit();
-                try datePage.load(date);
+                try datePage.load(hashedTitles, date);
                 try datePage.print(out, false, null);
                 if (daysBack == 0)
                     break;
@@ -1248,8 +1247,14 @@ pub const UserInterface = struct {
         }
         try self.page.update(index, self.lineBuf[0 .. fragment.len + endSlice.len]);
         if (index == 0) {
-            try self.page.smartRenameSelf(oldText, self.lineBuf[0 .. fragment.len + endSlice.len]);
-            //todo: page is now out of date, need to reload
+            const newName = self.lineBuf[0 .. fragment.len + endSlice.len];
+            _ = try self.headers.append(newName);
+            try self.page.smartRenameSelf(self.headers.hashedItems, oldText, newName);
+            self.page.deinit();
+            const headerIndex = self.headers.find(oldText) orelse unreachable;
+            self.headers.remove(headerIndex);
+            self.page = try Page.init(self.allocator);
+            try self.page.load(self.headers.hashedItems, newName);
         }
     }
     fn goto(self: *Self, s: []const u8) !void {
@@ -1273,7 +1278,7 @@ pub const UserInterface = struct {
                 }
             }
             const name = self.headers.items.items[i].title;
-            try self.page.load(name);
+            try self.page.load(self.headers.hashedItems, name);
         }
     }
     const Errors = error{ShellFail};
@@ -1299,7 +1304,7 @@ pub const UserInterface = struct {
             try self.page.appendReference(ref);
             var tempPage = try Page.init(self.allocator);
             defer tempPage.deinit();
-            try tempPage.load(ref);
+            try tempPage.load(self.headers.hashedItems, ref);
             for (tempPage.lines.items[1..]) |line, lineIndex| {
                 const text = line.text;
                 var i: usize = 0;
@@ -1381,12 +1386,12 @@ pub const UserInterface = struct {
         });
         self.headers = try Headers.init(self.allocator);
         self.page = try Page.init(self.allocator);
-        try self.page.load(titleCopy);
+        try self.page.load(self.headers.hashedItems, titleCopy);
     }
     pub fn help(self: *Self, title: []const u8) !void {
         var helpPage = try Page.init(self.allocator);
         defer helpPage.deinit();
-        try helpPage.load(title);
+        try helpPage.load(self.headers.hashedItems, title);
         var mgr = try OutputManager.init(self.allocator, false);
         defer mgr.deinit();
         try helpPage.print(&mgr, false, null);
@@ -1435,11 +1440,11 @@ pub const UserInterface = struct {
         {
             var mgr = try OutputManager.init(self.allocator, false);
             defer mgr.deinit();
-            try printDateRoll(self.allocator, &mgr, &dateBuf);
+            try printDateRoll(self.headers.hashedItems, self.allocator, &mgr, &dateBuf);
             try mgr.flush(self.out, self.in);
         }
         var date = try time.printNowLocal(&dateBuf);
-        try self.page.load(date);
+        try self.page.load(self.headers.hashedItems, date);
     }
     fn eventLoop(self: *Self, initialPrint: bool) !void {
         var printPage: bool = initialPrint;
@@ -1593,7 +1598,7 @@ pub const UserInterface = struct {
                             var tempPage = try Page.init(self.allocator);
                             defer tempPage.deinit();
                             const name = header.title;
-                            try tempPage.load(name);
+                            try tempPage.load(self.headers.hashedItems, name);
                             header.connections = tempPage.links.count() + tempPage.references.count();
                             //try self.out.print("connections{any}", .{header.connections});
                             header.marked = false;
@@ -1603,7 +1608,7 @@ pub const UserInterface = struct {
                             var tempPage = try Page.init(self.allocator);
                             defer tempPage.deinit();
                             const name = header.title;
-                            try tempPage.load(name);
+                            try tempPage.load(self.headers.hashedItems, name);
                             var neighborFound = false;
                             header.marked = true;
                             {
@@ -1653,7 +1658,7 @@ pub const UserInterface = struct {
                                 self.clipboard = null;
                                 var dateBuf: [100]u8 = undefined;
                                 var date = try time.printNowLocal(&dateBuf);
-                                try self.page.load(date);
+                                try self.page.load(self.headers.hashedItems, date);
                             } else {
                                 try self.out.print("cancelled.\n", .{});
                             }

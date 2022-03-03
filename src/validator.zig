@@ -19,14 +19,14 @@ pub fn validate(allocator: Allocator) !void {
         var tempPage = try zek.Page.init(allocator);
         defer tempPage.deinit();
         const name = header.title;
-        try tempPage.load(name);
+        try tempPage.load(headers.hashedItems, name);
         {
             var i = tempPage.references.iterator();
             while (i.next()) |kv| {
                 var otherPage = try zek.Page.init(allocator);
                 defer otherPage.deinit();
                 const otherName = kv.key_ptr.*;
-                try otherPage.load(otherName);
+                try otherPage.load(headers.hashedItems, otherName);
                 if (!otherPage.links.contains(name)) {
                     try out.print("Missing link {s} in page {s}\n", .{ name, otherName });
                     errorCount += 1;
@@ -39,7 +39,7 @@ pub fn validate(allocator: Allocator) !void {
                 var otherPage = try zek.Page.init(allocator);
                 defer otherPage.deinit();
                 const otherName = kv.key_ptr.*;
-                try otherPage.load(otherName);
+                try otherPage.load(headers.hashedItems, otherName);
                 if (!otherPage.references.contains(name)) {
                     try out.print("Missing reference {s} in page {s}\n", .{ name, otherName });
                     errorCount += 1;
