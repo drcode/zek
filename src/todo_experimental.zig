@@ -438,6 +438,7 @@ pub const UserInterfaceTodo = struct {
     pub fn activate(self: *Self, ui: *zek.UserInterface, printPage: *bool) !bool {
         try ui.page.save();
         const eltr = try self.eventLoopTodo(ui);
+
         if (eltr.quit) {
             printPage.* = false;
         } else if (eltr.write) {
@@ -540,7 +541,7 @@ pub const UserInterfaceTodo = struct {
                                 .nextPageIndex = i,
                                 .prevPage = false,
                                 .quit = false,
-                                .write = true,
+                                .write = false,
                             };
                         }
                     },
