@@ -546,6 +546,7 @@ pub const UserInterfaceTodo = struct {
                         }
                     },
                     .write => {
+                        try self.pageTodo.save();
                         try ui.setupDateRoll();
                         return EventLoopTodoResult{
                             .nextPageIndex = 0,

@@ -602,7 +602,18 @@ pub const Page = struct {
             }
         }
     }
-    fn smartRenameLink(self: *Self, oldText: []u8, newText: []u8) !void { //A link in this page has been renamed, need to fix link text and all references. Page is out of date after the process is complete and should no longer be accessed
+    fn unlinkReferences(self: *Self, hashedTitles: std.StringHashMap(usize), oldText: []u8) !void {
+        var i = self.references.iterator();
+        while (i.next()) |kv| {
+            const ref = kv.key_ptr.*;
+            var tempPage = try Page.init(self.allocator.allocator());
+            defer tempPage.deinit();
+            try tempPage.load(hashedTitles, ref);
+            try tempPage.smartRenameLink(oldText, null);
+            try tempPage.save();
+        }
+    }
+    fn smartRenameLink(self: *Self, oldText: []u8, optionalNewText: ?[]u8) !void { //A link in this page has been renamed, need to fix link text and all references. Page is out of date after the process is complete and should no longer be accessed
         for (self.lines.items) |line, index| {
             var found = false;
             var s: []u8 = tempBuf[0..0];
@@ -615,18 +626,27 @@ pub const Page = struct {
                     while (j < line.text.len and line.text[j] != ']') {
                         j += 1;
                     }
-                    if (std.mem.eql(u8, line.text[i + 1 .. j], oldText)) {
-                        const k = s.len;
-                        s.len += newText.len;
-                        std.mem.copy(u8, s[k..], newText);
-                        found = true;
+                    if (std.ascii.eqlIgnoreCase(line.text[i + 1 .. j], oldText)) {
+                        if (optionalNewText) |newText| {
+                            const k = s.len;
+                            s.len += newText.len;
+                            std.mem.copy(u8, s[k..], newText);
+                            found = true;
+                            s.len += 1;
+                            s[s.len - 1] = ']';
+                        } else { //its a page deletion, have to "unlink" the text
+                            const k = s.len - 1;
+                            s.len += oldText.len - 1;
+                            std.mem.copy(u8, s[k..], line.text[i + 1 .. j]);
+                            found = true;
+                        }
                     } else {
                         const k = s.len;
                         s.len += j - i - 1;
                         std.mem.copy(u8, s[k..], line.text[i + 1 .. j]);
+                        s.len += 1;
+                        s[s.len - 1] = ']';
                     }
-                    s.len += 1;
-                    s[s.len - 1] = ']';
                     i = j + 1;
                 } else {
                     s.len += 1;
@@ -1641,27 +1661,24 @@ pub const UserInterface = struct {
                         }
                     },
                     .yeet => {
-                        if (self.page.references.count() > 0) {
-                            try self.out.print("Please delete all references to [{s}] first before yeeting this page.\n", .{self.page.lines.items[0].text});
-                        } else {
-                            try self.out.print("Really yeet page for [{s}]? y/N", .{self.page.lines.items[0].text});
-                            const ans = try self.readLine();
-                            if (std.mem.eql(u8, ans, "y")) {
-                                try self.out.print("Page yeeted.\n", .{});
-                                try std.fs.cwd().deleteFile(try util.pageFileName(self.page.lines.items[0].text));
-                                if (self.headers.find(self.page.lines.items[0].text)) |index| {
-                                    self.headers.remove(index);
-                                }
-
-                                self.page.deinit();
-                                self.page = try Page.init(self.allocator);
-                                self.clipboard = null;
-                                var dateBuf: [100]u8 = undefined;
-                                var date = try time.printNowLocal(&dateBuf);
-                                try self.page.load(self.headers.hashedItems, date);
-                            } else {
-                                try self.out.print("cancelled.\n", .{});
+                        try self.out.print("Really yeet page for [{s}]? Any references to this page will be turned into unlinked text: y/N", .{self.page.lines.items[0].text});
+                        const ans = try self.readLine();
+                        if (std.mem.eql(u8, ans, "y")) {
+                            try self.page.unlinkReferences(self.headers.hashedItems, self.page.lines.items[0].text);
+                            try self.out.print("Page yeeted.\n", .{});
+                            try std.fs.cwd().deleteFile(try util.pageFileName(self.page.lines.items[0].text));
+                            if (self.headers.find(self.page.lines.items[0].text)) |index| {
+                                self.headers.remove(index);
                             }
+
+                            self.page.deinit();
+                            self.page = try Page.init(self.allocator);
+                            self.clipboard = null;
+                            var dateBuf: [100]u8 = undefined;
+                            var date = try time.printNowLocal(&dateBuf);
+                            try self.page.load(self.headers.hashedItems, date);
+                        } else {
+                            try self.out.print("cancelled.\n", .{});
                         }
                     },
                     .skip => {
