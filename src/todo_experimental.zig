@@ -16,7 +16,6 @@ const time = @import("time.zig");
 const TodoItemInfo = struct {
     const Self = @This();
     text: []u8,
-    link: bool,
     project: bool,
     fn parseTodoItem(s: []u8) TodoItemInfo {
         const project = (s.len >= 2) and (s[s.len - 1] == 'P') and (s[s.len - 2] == ' ');
@@ -26,7 +25,6 @@ const TodoItemInfo = struct {
                 if (s[x] == ']')
                     return TodoItemInfo{
                         .text = s[1..x],
-                        .link = true,
                         .project = project,
                     };
             }
@@ -36,7 +34,6 @@ const TodoItemInfo = struct {
                     s[0 .. s.len - 2]
                 else
                     s,
-                .link = false,
                 .project = project,
             };
         }
@@ -50,7 +47,6 @@ const PageTodo = struct {
         time: i64, //time on which trigger occurs
         interval: u16, //interval on which trigger recurs (for repeat triggers)
         project: bool,
-        link: bool, //does the todo have its own page?
         future: bool,
         trigger: bool, //item is not active todo but is active trigger
         repeat: bool, //trigger repeats
@@ -92,11 +88,7 @@ const PageTodo = struct {
             if (todo.trigger or todo.future or todo.xtra)
                 continue;
             try out.print("{:>2} ", .{i + 1});
-            if (todo.link)
-                try out.print("[", .{});
             try out.print("{s}", .{todo.text});
-            if (todo.link)
-                try out.print("]", .{});
             if (todo.project)
                 try out.print(" P", .{});
             try out.print("\n", .{});
@@ -159,7 +151,6 @@ const PageTodo = struct {
             .interval = undefined,
             .time = undefined,
             .project = isProject,
-            .link = isProject,
             .future = future,
             .trigger = false,
             .repeat = false,
@@ -203,13 +194,6 @@ const PageTodo = struct {
             _ = self.todos.orderedRemove(index);
         }
     }
-    fn toggleLink(self: *Self, indexVisible: u16) bool {
-        const index = self.indexVisibleToIndex(indexVisible);
-        const item = &self.todos.items[index];
-        item.link = !item.link;
-        item.modified = true;
-        return item.link;
-    }
     fn last(self: *Self) *Todo {
         return &self.todos.items[self.todos.items.len - 1];
     }
@@ -248,7 +232,6 @@ const PageTodo = struct {
                         .time = undefined,
                         .interval = undefined,
                         .project = item.project,
-                        .link = item.link,
                         .future = false,
                         .trigger = false,
                         .repeat = false,
@@ -298,11 +281,7 @@ const PageTodo = struct {
             defer f.close();
             const writer = f.writer();
             for (self.todos.items) |todo| {
-                if (todo.link)
-                    try writer.print("[", .{});
                 try writer.print("{s}", .{todo.text});
-                if (todo.link)
-                    try writer.print("]", .{});
                 if (todo.project)
                     try writer.print(" P", .{});
                 try writer.print("\n", .{});
@@ -320,18 +299,6 @@ const PageTodo = struct {
                 }
             }
         }
-        for (self.todos.items) |todo| {
-            if (todo.modified and todo.link) {
-                const fname = try util.pageFileName(todo.text);
-                const fileExisted = util.fileExists(fname);
-                var f = try util.appendFile(fname);
-                defer f.close();
-                if (!fileExisted) {
-                    try f.writer().print("__references\n", .{});
-                }
-                try f.writer().print("- todo\n- - {s}\n", .{todo.text});
-            }
-        }
     }
 };
 
@@ -344,7 +311,6 @@ const ActionTodo = struct {
         todo,
         goto,
         quit,
-        link,
         future,
         trigger,
         zeFuture,
@@ -384,10 +350,6 @@ const ActionTodo = struct {
             'q' => return ActionTodo{
                 .command = .quit,
                 .arg = undefined,
-            },
-            'l' => return ActionTodo{
-                .command = .link,
-                .arg = s[1..],
             },
             'g' => return ActionTodo{
                 .command = .goto,
@@ -494,9 +456,6 @@ pub const UserInterfaceTodo = struct {
                     .nextAction => try self.pageTodo.append(action.arg, false, false, false),
                     .project => {
                         try self.pageTodo.append(action.arg, true, false, false);
-                        if (ui.headers.find(action.arg) == null) {
-                            _ = try ui.headers.append(action.arg);
-                        }
                     },
                     .complete => {
                         const n = (try fmt.parseUnsigned(u16, action.arg, 10)) - 1;
@@ -505,13 +464,6 @@ pub const UserInterfaceTodo = struct {
                     .kill => {
                         const n = (try fmt.parseUnsigned(u16, action.arg, 10)) - 1;
                         self.pageTodo.complete(n, true);
-                    },
-                    .link => {
-                        const n = (try fmt.parseUnsigned(u16, action.arg, 10)) - 1;
-                        const link = self.pageTodo.toggleLink(n);
-                        if (link) {
-                            _ = try ui.headers.append(self.pageTodo.todos.items[n].text);
-                        }
                     },
                     .quit => {
                         try self.pageTodo.save();

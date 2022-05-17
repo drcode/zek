@@ -601,6 +601,7 @@ pub const Page = struct {
                 try tempPage.save();
             }
         }
+        try std.fs.cwd().deleteFile(try util.pageFileName(oldText));
     }
     fn unlinkReferences(self: *Self, hashedTitles: std.StringHashMap(usize), oldText: []u8) !void {
         var i = self.references.iterator();
