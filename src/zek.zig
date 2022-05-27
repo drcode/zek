@@ -1399,6 +1399,7 @@ pub const UserInterface = struct {
         _ = try self.shell([_][]const u8{
             "git",
             "pull",
+            "--rebase",
         });
         _ = try self.shell([_][]const u8{
             "git",
