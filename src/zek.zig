@@ -1304,8 +1304,7 @@ pub const UserInterface = struct {
     }
     const Errors = error{ShellFail};
     fn shell(self: *Self, comptime args: anytype) !u32 {
-        var process = try std.ChildProcess.init(&args, self.allocator);
-        defer process.deinit();
+        var process = std.ChildProcess.init(&args, self.allocator);
         const result = try process.spawnAndWait();
         switch (result) {
             Term.Exited => |n| return n,
@@ -1400,6 +1399,7 @@ pub const UserInterface = struct {
         _ = try self.shell([_][]const u8{
             "git",
             "pull",
+            "--rebase",
         });
         _ = try self.shell([_][]const u8{
             "git",
