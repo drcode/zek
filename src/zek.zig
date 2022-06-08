@@ -1728,4 +1728,7 @@ pub fn main() !void {
     var userInterface = try UserInterface.init(gpa.allocator());
     defer userInterface.deinit();
     try userInterface.eventLoop(false);
+    if (builtin.os.tag != .windows) {
+        try std.io.getStdOut().writer().print("\x1b[0m", .{});
+    }
 }
