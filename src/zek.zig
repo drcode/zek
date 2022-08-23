@@ -52,7 +52,7 @@ pub const Headers = struct {
     pub fn init(parentAllocator: Allocator) !Self {
         var allocator = try parentAllocator.create(std.heap.ArenaAllocator);
         allocator.* = std.heap.ArenaAllocator.init(parentAllocator);
-        const dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
+        const dir = try std.fs.cwd().openIterableDir(".", .{});
         var iterator = dir.iterate();
         var items = std.ArrayList(Header).init(allocator.allocator());
         var hashedItems = std.StringHashMap(usize).init(allocator.allocator());
@@ -1695,7 +1695,8 @@ pub const UserInterface = struct {
 
 pub fn main() !void {
     if (builtin.os.tag != .windows) {
-        var tty: std.fs.File = try std.fs.cwd().openFile("/dev/tty", .{ .mode = std.fs.File.OpenMode.read_write });
+        var tty: std.fs.File = try std.fs.cwd().openFile("/dev/tty", .{ // .mode = std.fs.File.OpenMode.read_write
+        });
         defer tty.close();
         var winSize = mem.zeroes(std.os.system.winsize);
         const err = std.os.system.ioctl(tty.handle, std.os.system.T.IOCGWINSZ, @ptrToInt(&winSize));
