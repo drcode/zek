@@ -38,4 +38,6 @@ in(j)ect
 - move item & its children up
 (-)
 - move item & its children down
+(?)
+- list pages that match via deep text search
 __references

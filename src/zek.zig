@@ -98,13 +98,36 @@ pub const Headers = struct {
         try self.hashedItems.put(s, self.items.items.len - 1);
         return self.items.items.len - 1;
     }
-    fn markByQuery(self: *Self, query: []const u8) u16 {
+    fn markByQuery(self: *Self, query: []const u8, deepSearch: bool) !u16 {
+        if (!deepSearch) {
+            var numMarked: u16 = 0;
+            for (self.items.items) |*header| {
+                if (contains(query, header.title)) {
+                    numMarked += 1;
+                    header.marked = true;
+                } else header.marked = false;
+            }
+            return numMarked;
+        }
         var numMarked: u16 = 0;
+        var allocator = try self.parentAllocator.create(std.heap.ArenaAllocator);
+        defer self.parentAllocator.destroy(allocator);
+        allocator.* = std.heap.ArenaAllocator.init(self.parentAllocator);
+        defer allocator.deinit();
         for (self.items.items) |*header| {
+            header.marked = false;
             if (contains(query, header.title)) {
                 numMarked += 1;
                 header.marked = true;
-            } else header.marked = false;
+                continue;
+            }
+            var tempPage = try Page.init(allocator.allocator());
+            defer tempPage.deinit();
+            try tempPage.load(null, header.title);
+            if (tempPage.grep(query)) {
+                numMarked += 1;
+                header.marked = true;
+            }
         }
         return numMarked;
     }
@@ -221,6 +244,13 @@ pub const Page = struct {
         _ = self.lines.orderedRemove(index);
         self.modified = true;
     }
+    fn grep(self: *Self, query: []const u8) bool {
+        for (self.lines.items) |line| {
+            if (contains(query, line.text))
+                return true;
+        }
+        return false;
+    }
     fn swapLines(self: *Self, startA: usize, startB: usize, length: usize) void {
         var i: usize = 0;
         while (i < length) : (i += 1) {
@@ -304,7 +334,7 @@ pub const Page = struct {
     fn readLine(f: Reader) !?[]u8 {
         return try f.readUntilDelimiterOrEof(&tempBuf, '\n');
     }
-    pub fn load(self: *Self, hashedTitles: std.StringHashMap(usize), title: []const u8) !void {
+    pub fn load(self: *Self, hashedTitles: ?std.StringHashMap(usize), title: []const u8) !void {
         _ = hashedTitles;
         try self.append(0, title, false);
         const fname = try util.pageFileName(title);
@@ -337,11 +367,13 @@ pub const Page = struct {
                             break;
                         }
                     }
-                    if (texts.items.len > 0 and hashedTitles.contains(refTitle)) { //The reference is not an empty reference, and the referred item was not previously renamed/deleted
-                        try self.references.put(refTitle, texts);
-                    } else {
-                        _ = self.references.remove(refTitle);
-                        texts.deinit();
+                    if (hashedTitles) |ht| {
+                        if (texts.items.len > 0 and ht.contains(refTitle)) { //The reference is not an empty reference, and the referred item was not previously renamed/deleted
+                            try self.references.put(refTitle, texts);
+                        } else {
+                            _ = self.references.remove(refTitle);
+                            texts.deinit();
+                        }
                     }
                 }
             }
@@ -687,6 +719,7 @@ const Action = struct {
         overview,
         yeet,
         skip,
+        grep,
     };
     command: Command,
     arg: []const u8,
@@ -778,6 +811,10 @@ const Action = struct {
             'y' => return Action{
                 .command = .yeet,
                 .arg = undefined,
+            },
+            '?' => return Action{
+                .command = .grep,
+                .arg = s[1..],
             },
             else => return null,
         }
@@ -1059,7 +1096,7 @@ pub const UserInterface = struct {
         }
     }
     //This function takes a partial page name and interactively resolves the desired header index
-    pub fn pickHeader(self: *Self, query: []const u8, allowNew: bool, globalQuery: bool) !?usize {
+    pub fn pickHeader(self: *Self, query: []const u8, allowNew: bool, globalQuery: bool, deepSearch: bool) !?usize {
         //first handle intra-page queries
         if (!globalQuery) {
             {
@@ -1079,7 +1116,7 @@ pub const UserInterface = struct {
             }
         }
         //Now handle global queries
-        const numMarked = self.headers.markByQuery(query);
+        const numMarked = try self.headers.markByQuery(query, deepSearch);
         if (numMarked == 1 and !allowNew) {
             for (self.headers.items.items) |header, i| {
                 if (header.marked) {
@@ -1087,11 +1124,13 @@ pub const UserInterface = struct {
                 }
             }
         }
-        for (self.headers.items.items) |header, i| {
-            if (!header.marked)
-                continue;
-            if (header.title.len == query.len)
-                return i;
+        if (!deepSearch) {
+            for (self.headers.items.items) |header, i| {
+                if (!header.marked)
+                    continue;
+                if (header.title.len == query.len)
+                    return i;
+            }
         }
         var markIndex: u16 = 0;
         for (self.headers.items.items) |header| {
@@ -1157,7 +1196,7 @@ pub const UserInterface = struct {
     }
     //The result argument is a slice that can be increased in length. The result is already pre-populated with everything up to the query text.
     fn queryHeaders(self: *Self, query: []const u8, destination: []u8) ![]u8 {
-        if (try self.pickHeader(query, true, true)) |h| {
+        if (try self.pickHeader(query, true, true, false)) |h| {
             const header = self.headers.items.items[h];
             var result = destination;
             result.len += header.title.len;
@@ -1278,14 +1317,14 @@ pub const UserInterface = struct {
             try self.page.load(self.headers.hashedItems, newName);
         }
     }
-    fn goto(self: *Self, s: []const u8) !void {
+    fn goto(self: *Self, s: []const u8, deepSearch: bool) !void {
         try self.page.save();
-        const globalHeader = (s.len >= 1 and s[0] == ' ');
+        const globalHeader = !deepSearch and s.len >= 1 and s[0] == ' ';
         const query = if (globalHeader)
             s[1..]
         else
             s;
-        if (try self.pickHeader(query, false, globalHeader)) |i| {
+        if (try self.pickHeader(query, false, globalHeader, deepSearch)) |i| {
             if (self.pageOther) |po|
                 po.deinit();
             self.pageOther = self.page;
@@ -1494,7 +1533,10 @@ pub const UserInterface = struct {
                     },
                     .append, .insert, .inject => try self.addText(action),
                     .goto => {
-                        try self.goto(action.arg);
+                        try self.goto(action.arg, false);
+                    },
+                    .grep => {
+                        try self.goto(action.arg, true);
                     },
                     .quit => {
                         try self.page.save();
