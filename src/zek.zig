@@ -1735,6 +1735,12 @@ pub const UserInterface = struct {
     }
 };
 
+fn reset_term() void {
+    if (builtin.os.tag != .windows) {
+        std.io.getStdOut().writer().print("\x1b[0m", .{}) catch {};
+    }
+}
+
 pub fn main() !void {
     if (builtin.os.tag != .windows) {
         var tty: std.fs.File = try std.fs.cwd().openFile("/dev/tty", .{ // .mode = std.fs.File.OpenMode.read_write
@@ -1748,6 +1754,7 @@ pub fn main() !void {
         }
         try std.io.getStdOut().writer().print("\x1b[37;1m", .{});
     }
+    defer reset_term();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -1771,7 +1778,4 @@ pub fn main() !void {
     var userInterface = try UserInterface.init(gpa.allocator());
     defer userInterface.deinit();
     try userInterface.eventLoop(false);
-    if (builtin.os.tag != .windows) {
-        try std.io.getStdOut().writer().print("\x1b[0m", .{});
-    }
 }
